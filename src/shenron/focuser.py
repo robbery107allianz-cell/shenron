@@ -100,24 +100,19 @@ class FocusReport:
     top_terms: tuple[FocusEntry, ...]
 
 
-def analyze(
-    sessions: list[SessionMeta],
-    hours: int = 24,
-    top_n: int = 20,
-    user_only: bool = True,
-) -> FocusReport:
-    """
-    Scan recent sessions and count keyword frequency.
-
-    user_only=True: only analyze what Rob typed (signal of his attention).
-    """
-    cutoff = datetime.now(tz=UTC) - timedelta(hours=hours)
-    recent = [s for s in sessions if s.modified_time >= cutoff]
-
+def _count_tokens(sessions: list[SessionMeta], user_only: bool = True) -> tuple[Counter, int]:
+    """Scan sessions and return (token_counter, messages_scanned)."""
     counter: Counter[str] = Counter()
     messages_scanned = 0
 
-    for meta in recent:
+    _noise_prefixes = (
+        "<local-command", "<system-reminder", "<task-notification",
+        "Updated task", "The file", "File created", "Found ",
+        "No files", "Showing ", "Tool loaded", "Usage: ",
+        "/Users/", "~/", "---", "```",
+    )
+
+    for meta in sessions:
         for msg in stream_messages(meta.file_path):
             if user_only and msg.msg_type != "user":
                 continue
@@ -128,23 +123,35 @@ def analyze(
             if not text or len(text) < 5:
                 continue
 
-            # Skip tool results and system noise masquerading as user messages
-            _noise_prefixes = (
-                "<local-command", "<system-reminder", "<task-notification",
-                "Updated task", "The file", "File created", "Found ",
-                "No files", "Showing ", "Tool loaded", "Usage: ",
-                "/Users/", "~/", "---", "```",
-            )
             if any(text.startswith(p) for p in _noise_prefixes):
                 continue
-            # Skip messages that are mostly paths/code (high slash density)
-            slash_ratio = text.count("/") / max(len(text), 1)
-            if slash_ratio > 0.05:
+            if text.count("/") / max(len(text), 1) > 0.05:
                 continue
 
             tokens = _extract_tokens(text)
             counter.update(tokens)
             messages_scanned += 1
+
+    return counter, messages_scanned
+
+
+def analyze(
+    sessions: list[SessionMeta],
+    hours: int = 24,
+    top_n: int = 20,
+    user_only: bool = True,
+) -> FocusReport:
+    """
+    Scan recent sessions and count keyword frequency.
+    hours=0 means scan all sessions (full history).
+    """
+    if hours > 0:
+        cutoff = datetime.now(tz=UTC) - timedelta(hours=hours)
+        target = [s for s in sessions if s.modified_time >= cutoff]
+    else:
+        target = sessions  # full history
+
+    counter, messages_scanned = _count_tokens(target, user_only=user_only)
 
     max_count = counter.most_common(1)[0][1] if counter else 1
     top = [
@@ -155,10 +162,78 @@ def analyze(
     return FocusReport(
         generated_at=datetime.now(tz=UTC),
         hours_window=hours,
-        sessions_scanned=len(recent),
+        sessions_scanned=len(target),
         messages_scanned=messages_scanned,
         top_terms=tuple(top),
     )
+
+
+def analyze_with_baseline(
+    sessions: list[SessionMeta],
+    hours: int = 24,
+    top_n: int = 20,
+    user_only: bool = True,
+) -> tuple[FocusReport, FocusReport, list[tuple[str, float]]]:
+    """
+    Returns (recent_report, baseline_report, spikes).
+
+    spikes: top terms sorted by relative uplift (recent_freq / baseline_freq).
+    Terms that are spiking today but absent historically get infinite uplift.
+    """
+    # Recent window
+    cutoff = datetime.now(tz=UTC) - timedelta(hours=hours)
+    recent_sessions = [s for s in sessions if s.modified_time >= cutoff]
+
+    recent_counter, recent_msgs = _count_tokens(recent_sessions, user_only=user_only)
+    all_counter, all_msgs = _count_tokens(sessions, user_only=user_only)
+
+    # Normalize both counters to per-session rates
+    n_recent = max(len(recent_sessions), 1)
+    n_all = max(len(sessions), 1)
+
+    # Recent report
+    max_r = recent_counter.most_common(1)[0][1] if recent_counter else 1
+    recent_top = [
+        FocusEntry(term=t, count=c, pct=c / max_r)
+        for t, c in recent_counter.most_common(top_n)
+    ]
+    recent_report = FocusReport(
+        generated_at=datetime.now(tz=UTC),
+        hours_window=hours,
+        sessions_scanned=len(recent_sessions),
+        messages_scanned=recent_msgs,
+        top_terms=tuple(recent_top),
+    )
+
+    # Baseline report
+    max_b = all_counter.most_common(1)[0][1] if all_counter else 1
+    baseline_top = [
+        FocusEntry(term=t, count=c, pct=c / max_b)
+        for t, c in all_counter.most_common(top_n)
+    ]
+    baseline_report = FocusReport(
+        generated_at=datetime.now(tz=UTC),
+        hours_window=0,
+        sessions_scanned=len(sessions),
+        messages_scanned=all_msgs,
+        top_terms=tuple(baseline_top),
+    )
+
+    # Compute relative spikes: (recent_rate) / (baseline_rate)
+    # rate = count / n_sessions to normalize volume
+    spikes: list[tuple[str, float]] = []
+    for term, r_count in recent_counter.most_common(top_n * 2):
+        r_rate = r_count / n_recent
+        b_rate = all_counter.get(term, 0) / n_all
+        if b_rate == 0:
+            uplift = r_rate * 10  # new term, high signal
+        else:
+            uplift = r_rate / b_rate
+        spikes.append((term, uplift))
+
+    spikes.sort(key=lambda x: x[1], reverse=True)
+
+    return recent_report, baseline_report, spikes[:top_n]
 
 
 # ─── Renderer ─────────────────────────────────────────────────────────────────
@@ -173,19 +248,70 @@ def _bar(pct: float) -> str:
 
 
 def render_markdown(report: FocusReport) -> str:
+    """Render a single FocusReport (recent or baseline only)."""
     ts = report.generated_at.strftime("%Y-%m-%d %H:%M UTC")
+    window = f"{report.hours_window}h" if report.hours_window > 0 else "全量历史"
     lines = [
         f"## 当前聚焦 · Focus Weights",
-        f"> 更新: {ts} · 扫描窗口: {report.hours_window}h · "
+        f"> 更新: {ts} · 扫描窗口: {window} · "
         f"{report.sessions_scanned} sessions · {report.messages_scanned} 条消息",
         "",
         "| # | 关键词 | 频率 | 次数 |",
         "|---|--------|------|------|",
     ]
-
     for i, entry in enumerate(report.top_terms, 1):
         bar = _bar(entry.pct)
         lines.append(f"| {i:2d} | {entry.term} | {bar} | {entry.count} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_full_markdown(
+    recent: FocusReport,
+    baseline: FocusReport,
+    spikes: list[tuple[str, float]],
+) -> str:
+    """Render a three-section focus report: spikes + recent + baseline."""
+    ts = recent.generated_at.strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        f"## Focus Weights · 注意力权重",
+        f"> 更新: {ts}",
+        "",
+        # ── Section 1: Spikes (the most actionable signal)
+        f"### 近期热词 · Spikes（过去{recent.hours_window}h vs 全量基线）",
+        f"> 相对基线的上升倍数 — 数值越高说明这个词今天异常活跃",
+        "",
+        "| # | 关键词 | 上升倍数 |",
+        "|---|--------|---------|",
+    ]
+    for i, (term, uplift) in enumerate(spikes[:15], 1):
+        bar = _bar(min(uplift / 5, 1.0))  # cap at 5x for bar display
+        lines.append(f"| {i:2d} | {term} | {bar} ×{uplift:.1f} |")
+
+    lines += [
+        "",
+        # ── Section 2: Recent window
+        f"### 近期频率 · Recent（{recent.hours_window}h · "
+        f"{recent.sessions_scanned} sessions · {recent.messages_scanned} msgs）",
+        "",
+        "| # | 关键词 | 频率 | 次数 |",
+        "|---|--------|------|------|",
+    ]
+    for i, entry in enumerate(recent.top_terms, 1):
+        lines.append(f"| {i:2d} | {entry.term} | {_bar(entry.pct)} | {entry.count} |")
+
+    lines += [
+        "",
+        # ── Section 3: Baseline
+        f"### 历史基线 · Baseline（{baseline.sessions_scanned} sessions · "
+        f"{baseline.messages_scanned} msgs）",
+        "",
+        "| # | 关键词 | 权重 | 总次数 |",
+        "|---|--------|------|--------|",
+    ]
+    for i, entry in enumerate(baseline.top_terms, 1):
+        lines.append(f"| {i:2d} | {entry.term} | {_bar(entry.pct)} | {entry.count} |")
 
     lines.append("")
     return "\n".join(lines)

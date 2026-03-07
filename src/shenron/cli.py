@@ -339,21 +339,23 @@ def focus(
     output: Annotated[str | None, typer.Option("--output", "-o", help="Write to file (default: stdout)")] = None,
     all_messages: Annotated[bool, typer.Option("--all-msg", help="Include assistant messages too")] = False,
 ) -> None:
-    """Analyze recent session keyword frequency — what topics are hot right now."""
-    from shenron.focuser import analyze, render_markdown
+    """Analyze keyword frequency with historical baseline comparison."""
+    from shenron.focuser import analyze_with_baseline, render_full_markdown
 
     sessions = list(_discover_sessions())
     if not sessions:
         console.print("\n  [yellow]No sessions found.[/yellow]\n")
         raise typer.Exit(1)
 
-    report = analyze(sessions, hours=hours, top_n=top, user_only=not all_messages)
+    recent_report, baseline_report, spikes = analyze_with_baseline(
+        sessions, hours=hours, top_n=top, user_only=not all_messages
+    )
 
-    if not report.top_terms:
+    if not recent_report.top_terms:
         console.print(f"\n  [yellow]No keywords found in the last {hours}h.[/yellow]\n")
         raise typer.Exit(0)
 
-    content = render_markdown(report)
+    content = render_full_markdown(recent_report, baseline_report, spikes)
 
     if output:
         out_path = Path(output)
