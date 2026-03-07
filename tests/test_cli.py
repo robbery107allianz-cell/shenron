@@ -110,7 +110,7 @@ class TestInfoCommand:
 class TestSearchCommand:
     def test_search_finds_match(self, sample_projects_dir: Path):
         with patch("shenron.cli._discover_sessions", _mock_discover(sample_projects_dir)):
-            result = runner.invoke(app, ["search", "kaioshin"])
+            result = runner.invoke(app, ["search", "kaioshin"], input="\n")
         assert result.exit_code == 0
         assert "kaioshin" in result.output.lower()
 
@@ -122,18 +122,18 @@ class TestSearchCommand:
 
     def test_search_regex(self, sample_projects_dir: Path):
         with patch("shenron.cli._discover_sessions", _mock_discover(sample_projects_dir)):
-            result = runner.invoke(app, ["search", r"kaio\w+", "--regex"])
+            result = runner.invoke(app, ["search", r"kaio\w+", "--regex"], input="\n")
         assert result.exit_code == 0
         assert "kaioshin" in result.output.lower()
 
     def test_search_user_only(self, sample_projects_dir: Path):
         with patch("shenron.cli._discover_sessions", _mock_discover(sample_projects_dir)):
-            result = runner.invoke(app, ["search", "kaioshin", "--type", "user"])
+            result = runner.invoke(app, ["search", "kaioshin", "--type", "user"], input="\n")
         assert result.exit_code == 0
 
     def test_search_assistant_only(self, sample_projects_dir: Path):
         with patch("shenron.cli._discover_sessions", _mock_discover(sample_projects_dir)):
-            result = runner.invoke(app, ["search", "kaioshin", "--type", "assistant"])
+            result = runner.invoke(app, ["search", "kaioshin", "--type", "assistant"], input="\n")
         assert result.exit_code == 0
 
     def test_search_no_sessions(self, tmp_path: Path):
@@ -145,7 +145,7 @@ class TestSearchCommand:
 
     def test_search_with_limit(self, sample_projects_dir: Path):
         with patch("shenron.cli._discover_sessions", _mock_discover(sample_projects_dir)):
-            result = runner.invoke(app, ["search", "kaioshin", "--limit", "1"])
+            result = runner.invoke(app, ["search", "kaioshin", "--limit", "1"], input="\n")
         assert result.exit_code == 0
 
     def test_search_case_sensitive(self, sample_projects_dir: Path):

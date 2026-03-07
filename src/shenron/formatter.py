@@ -234,21 +234,25 @@ def print_search_results(
     results_iter: "Iterator[tuple[SessionMeta, list[SearchResult]]]",
     query: str,
     total_limit: int,
-) -> None:
-    """Render search results with highlighted matches."""
+) -> tuple[list[SessionMeta], int]:
+    """Render search results with highlighted matches.
+
+    Returns (matched_sessions, total_matches) for interactive follow-up.
+    """
     total_matches = 0
-    total_sessions = 0
+    matched_sessions: list[SessionMeta] = []
 
     console.print()
 
     for meta, session_results in results_iter:
-        total_sessions += 1
+        matched_sessions.append(meta)
+        n = len(matched_sessions)
 
-        # Session header
+        # Session header with index number
         date_str = meta.modified_time.strftime("%Y-%m-%d") if meta.modified_time else "—"
         sid = _short_id(meta.session_id)
         console.print(
-            f"[bold cyan]▶ {meta.project_name}[/bold cyan]  "
+            f"[bold cyan]▶ [{n}] {meta.project_name}[/bold cyan]  "
             f"[dim]{sid}  {date_str}[/dim]"
         )
 
@@ -258,7 +262,6 @@ def print_search_results(
             role = "YOU" if msg.msg_type == "user" else _short_model(msg.model).upper()
             ts = msg.timestamp.strftime("%H:%M") if msg.timestamp else ""
 
-            # Build highlighted line: before + [match] + after
             before = _escape(result.context_before)
             matched = _escape(result.match_text)
             after = _escape(result.context_after)
@@ -278,8 +281,10 @@ def print_search_results(
     else:
         console.print(
             f"  [dim]Found [bold]{total_matches}[/bold] match{'es' if total_matches != 1 else ''} "
-            f"across [bold]{total_sessions}[/bold] session{'s' if total_sessions != 1 else ''}.[/dim]\n"
+            f"across [bold]{len(matched_sessions)}[/bold] session{'s' if len(matched_sessions) != 1 else ''}.[/dim]"
         )
+
+    return matched_sessions, total_matches
 
 
 # ─── Stats Dashboard ──────────────────────────────────────────────────────────

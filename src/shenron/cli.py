@@ -233,7 +233,7 @@ def resume(
 
 @app.command()
 def search(
-    query: Annotated[str, typer.Argument(help="Search query (keyword or regex)")],
+    query: Annotated[list[str], typer.Argument(help="Search terms — multiple terms = AND logic")],
     project: Annotated[str | None, typer.Option("--project", "-p", help="Filter by project name")] = None,
     regex: Annotated[bool, typer.Option("--regex", "-r", help="Treat query as regex")] = False,
     case_sensitive: Annotated[bool, typer.Option("--case-sensitive", "-c", help="Case-sensitive search")] = False,
@@ -269,7 +269,7 @@ def search(
     # "both" or None → default (user + assistant)
 
     results_iter = _search(
-        query=query,
+        terms=query,
         sessions=sessions,
         regex=regex,
         case_sensitive=case_sensitive,
@@ -279,7 +279,24 @@ def search(
         context_chars=context,
     )
 
-    print_search_results(results_iter, query=query, total_limit=limit)
+    query_display = " AND ".join(query)
+    matched_sessions, total_matches = print_search_results(results_iter, query=query_display, total_limit=limit)
+
+    # Interactive follow-up: open a session for full view
+    if total_matches > 0 and len(matched_sessions) > 0:
+        console.print()
+        choices = "/".join(str(i + 1) for i in range(len(matched_sessions)))
+        raw = console.input(f"  [dim]Open session ❲{choices}❳ or Enter to exit: [/dim]").strip()
+        if raw.isdigit():
+            idx = int(raw) - 1
+            if 0 <= idx < len(matched_sessions):
+                chosen = matched_sessions[idx]
+                from shenron.parser import parse_session
+                session = parse_session(chosen)
+                print_session_detail(session)
+            else:
+                console.print("  [yellow]Invalid number.[/yellow]\n")
+        console.print()
 
 
 @app.command()
@@ -313,6 +330,67 @@ def stats(
 
     report = compute_stats(sessions, group_by=group_by, top_n=top)
     print_stats(report, subscription_usd=subscription)
+
+
+@app.command()
+def digest(
+    session_id: Annotated[str | None, typer.Argument(help="Session UUID or prefix (omit for latest)")] = None,
+    project: Annotated[str | None, typer.Option("--project", "-p", help="Filter to project")] = None,
+    tail: Annotated[int, typer.Option("--tail", "-t", help="Tail exchanges for closing context")] = 3,
+    max_key: Annotated[int, typer.Option("--max-key", "-k", help="Max key decision exchanges")] = 8,
+    append: Annotated[str | None, typer.Option("--append", "-a", help="Append to decisions.md file")] = None,
+    after: Annotated[str | None, typer.Option("--after", help="Digest sessions after date (YYYY-MM-DD)")] = None,
+    before: Annotated[str | None, typer.Option("--before", help="Digest sessions before date (YYYY-MM-DD)")] = None,
+    all_recent: Annotated[bool, typer.Option("--all", help="Digest all sessions in date range")] = False,
+) -> None:
+    """Digest a session into a structured decisions.md entry."""
+    from shenron.digester import digest_session, render_markdown
+    from shenron.parser import parse_session
+
+    after_dt = _parse_date(after, "after")
+    before_dt = _parse_date(before, "before")
+
+    if all_recent:
+        sessions = list(_discover_sessions(
+            project_filter=project,
+            after=after_dt,
+            before=before_dt,
+        ))
+        if not sessions:
+            console.print("\n  [yellow]No sessions found.[/yellow]\n")
+            raise typer.Exit(1)
+        metas = sorted(sessions, key=lambda m: m.modified_time, reverse=True)
+    elif session_id:
+        meta = _find_session(session_id)
+        if not meta:
+            console.print(f"\n  [red]Session not found:[/red] [bold]{session_id}[/bold]\n")
+            raise typer.Exit(1)
+        metas = [meta]
+    else:
+        sessions = list(_discover_sessions(project_filter=project))
+        if not sessions:
+            console.print("\n  [yellow]No sessions found.[/yellow]\n")
+            raise typer.Exit(1)
+        metas = [sorted(sessions, key=lambda m: m.modified_time, reverse=True)[0]]
+
+    blocks: list[str] = []
+    for meta in metas:
+        session = parse_session(meta)
+        entry = digest_session(session, tail_n=tail, max_key=max_key)
+        blocks.append(render_markdown(entry))
+
+    output = "\n".join(blocks)
+
+    if append:
+        out_path = Path(append)
+        # Write header if file doesn't exist yet
+        if not out_path.exists():
+            out_path.write_text("# Decisions Log\n\n", encoding="utf-8")
+        with out_path.open("a", encoding="utf-8") as f:
+            f.write(output)
+        console.print(f"\n  [green]Appended {len(metas)} digest(s) to:[/green] {out_path}\n")
+    else:
+        console.print(output)
 
 
 @app.command()

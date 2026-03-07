@@ -19,11 +19,13 @@ class SearchResult:
     context_after: str    # text after the match
 
 
-def _build_pattern(query: str, regex: bool, case_sensitive: bool) -> re.Pattern:
-    """Compile search pattern."""
+def _build_patterns(terms: list[str], regex: bool, case_sensitive: bool) -> list[re.Pattern]:
+    """Compile one pattern per search term."""
     flags = 0 if case_sensitive else re.IGNORECASE
-    pattern = query if regex else re.escape(query)
-    return re.compile(pattern, flags)
+    return [
+        re.compile(term if regex else re.escape(term), flags)
+        for term in terms
+    ]
 
 
 def _extract_context(text: str, match: re.Match, context_chars: int) -> tuple[str, str, str]:
@@ -43,7 +45,7 @@ def _extract_context(text: str, match: re.Match, context_chars: int) -> tuple[st
 
 
 def search(
-    query: str,
+    terms: list[str],
     sessions: list[SessionMeta],
     regex: bool = False,
     case_sensitive: bool = False,
@@ -53,12 +55,13 @@ def search(
     context_chars: int = 80,
 ) -> Iterator[tuple[SessionMeta, list[SearchResult]]]:
     """
-    Search across sessions for query, yielding (session_meta, [results]) per session.
+    Search across sessions for terms (AND logic), yielding (session_meta, [results]) per session.
 
-    Generator — results are yielded as found, no need to wait for full scan.
-    Stops after `limit` total matches.
+    Multiple terms: a message must contain ALL terms to match.
+    Results are anchored to the first term's match position for context display.
+    Generator — results are yielded as found. Stops after `limit` total matches.
     """
-    pattern = _build_pattern(query, regex, case_sensitive)
+    patterns = _build_patterns(terms, regex, case_sensitive)
     default_types = {"user", "assistant"}
     filter_types = message_types or default_types
 
@@ -86,7 +89,12 @@ def search(
             if not text:
                 continue
 
-            for match in pattern.finditer(text):
+            # AND logic: all patterns must match somewhere in the text
+            if not all(p.search(text) for p in patterns):
+                continue
+
+            # Iterate matches of the first pattern for context display
+            for match in patterns[0].finditer(text):
                 before, matched, after = _extract_context(text, match, context_chars)
                 session_results.append(
                     SearchResult(
