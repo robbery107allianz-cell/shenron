@@ -333,6 +333,37 @@ def stats(
 
 
 @app.command()
+def focus(
+    hours: Annotated[int, typer.Option("--hours", "-h", help="Look-back window in hours")] = 24,
+    top: Annotated[int, typer.Option("--top", "-t", help="Top N terms to show")] = 20,
+    output: Annotated[str | None, typer.Option("--output", "-o", help="Write to file (default: stdout)")] = None,
+    all_messages: Annotated[bool, typer.Option("--all-msg", help="Include assistant messages too")] = False,
+) -> None:
+    """Analyze recent session keyword frequency — what topics are hot right now."""
+    from shenron.focuser import analyze, render_markdown
+
+    sessions = list(_discover_sessions())
+    if not sessions:
+        console.print("\n  [yellow]No sessions found.[/yellow]\n")
+        raise typer.Exit(1)
+
+    report = analyze(sessions, hours=hours, top_n=top, user_only=not all_messages)
+
+    if not report.top_terms:
+        console.print(f"\n  [yellow]No keywords found in the last {hours}h.[/yellow]\n")
+        raise typer.Exit(0)
+
+    content = render_markdown(report)
+
+    if output:
+        out_path = Path(output)
+        out_path.write_text(content, encoding="utf-8")
+        console.print(f"\n  [green]✓ Focus report written to:[/green] {out_path}\n")
+    else:
+        console.print(content)
+
+
+@app.command()
 def digest(
     session_id: Annotated[str | None, typer.Argument(help="Session UUID or prefix (omit for latest)")] = None,
     project: Annotated[str | None, typer.Option("--project", "-p", help="Filter to project")] = None,
