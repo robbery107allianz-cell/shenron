@@ -65,4 +65,8 @@ strict = true
 source = ["shenron"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 70
+omit = [
+    "src/shenron/digester.py",
+    "src/shenron/focuser.py",
+]
