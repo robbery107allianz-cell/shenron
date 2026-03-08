@@ -3,7 +3,8 @@
 > *"Speak your wish and it shall be granted."*
 >
 > Shenron is the eternal dragon of Claude Code — summon it to recall every conversation,
-> search your entire history, and see exactly how much value you're getting from your Claude Max subscription.
+> search your entire history, distill decisions into persistent memory, and see exactly
+> how much value you're getting from your Claude Max subscription.
 
 [![PyPI version](https://img.shields.io/pypi/v/shenron.svg)](https://pypi.org/project/shenron/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
@@ -25,6 +26,8 @@ with no way to search it.
 - **Track** token usage and equivalent API costs across all projects
 - **Export** any session to Markdown, JSON, or HTML
 - **Resume** any past session instantly with `claude --resume`
+- **Digest** any session into a structured decisions log — topic, key decisions, closing context
+- **Focus** on what matters now — keyword frequency analysis against your full history baseline
 
 Part of the **Dragon Ball universe** of Claude Code tools, alongside
 [Kaioshin](https://github.com/robbery107allianz-cell/kaioshin) (the Supreme Kai security sandbox).
@@ -65,6 +68,12 @@ shenron export abc12345 -f markdown -o session.md
 
 # Resume the latest session
 claude --resume $(shenron resume)
+
+# Distill latest session into a decisions log
+shenron digest --append ~/decisions.md
+
+# See what topics are hot right now vs your full history
+shenron focus
 ```
 
 ---
@@ -163,6 +172,73 @@ claude --resume $(shenron resume)   # one-liner to resume latest
 
 ```
 shenron info    # total sessions, disk usage, project list, date range
+```
+
+### `shenron digest [id]` — Distill a session into a decisions log
+
+Extracts the key signal from a session — topic, decision-relevant exchanges,
+and closing context — and formats it as a structured Markdown entry.
+No LLM API required; uses heuristic signal-word detection.
+
+```
+shenron digest                              # digest latest session
+shenron digest abc12345                     # digest specific session
+shenron digest --append ~/decisions.md      # append to decisions log
+shenron digest --all --after 2026-03-01 --append ~/decisions.md
+                                            # batch: all recent sessions
+shenron digest --max-key 5 --tail 2        # tune extraction depth
+```
+
+**What it extracts:**
+
+| Field | How |
+|-------|-----|
+| Topic | First meaningful user message |
+| Key decisions | Exchanges containing decision signal words (zh + en) |
+| Closing context | Last N conversational exchanges (tool noise filtered) |
+
+### `shenron focus` — Keyword frequency with historical baseline
+
+Analyzes what you've been talking about recently and compares it against
+your full session history. Shows three layers: relative spikes, recent
+frequency, and the all-time baseline — so you can tell what's genuinely
+new vs. what's always been part of your work.
+
+```
+shenron focus                               # 24h window vs full baseline
+shenron focus --hours 48                    # wider recent window
+shenron focus --top 30                      # more terms
+shenron focus --output ~/focus.md           # write to file
+shenron focus --all-msg                     # include assistant messages too
+```
+
+**Sample output:**
+
+```
+## Focus Weights · 注意力权重
+
+### Spikes（past 24h vs full baseline）
+  年级   ████████████████ ×18.5
+  数学   ████████████████ ×18.1
+  shadow ████████████████ ×12.4
+
+### Recent 24h  (4 sessions · 829 msgs)
+  年级   ████████████████  242
+  数据   ██████████████░░  218
+  shadow ██████████░░░░░░  150
+
+### Baseline  (74 sessions · 5251 msgs)
+  claude ████████████████  1061
+  数据   █████████████░░░  1027
+  shadow █████████████░░░  1020
+```
+
+**Automate with launchd** (runs every 12 hours):
+
+```bash
+# Install the scheduler (one-time setup)
+cp launchd/com.1984.shenron.focus.plist ~/Library/LaunchAgents/
+launchctl load -w ~/Library/LaunchAgents/com.1984.shenron.focus.plist
 ```
 
 ---
