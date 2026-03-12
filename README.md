@@ -21,7 +21,7 @@ with no way to search it.
 
 **Shenron** gives you that power:
 
-- **Search** your entire Claude Code history with keywords or regex
+- **Search** your entire Claude Code history — ripgrep-accelerated, with keywords, regex, or multi-term AND
 - **Browse** sessions with readable conversation formatting
 - **Track** token usage and equivalent API costs across all projects
 - **Export** any session to Markdown, JSON, or HTML
@@ -104,15 +104,29 @@ shenron show abc12345 --raw         # raw JSONL output
 
 ### `shenron search <query>` — Search history
 
+Uses **ripgrep** (`rg`) under the hood to pre-filter session files, then applies
+structured Python parsing for role/model/date filtering. One command, best of
+both worlds — rg speed with full session awareness.
+
 ```
-shenron search "authentication"
-shenron search "TODO" --type user           # only your messages
-shenron search "Error" --type assistant     # only Claude's responses
-shenron search "def \w+\(" --regex          # regex search
+shenron search "authentication"                     # basic keyword
+shenron search "docker" "compose"                   # multi-term AND logic
+shenron search "TODO" --type user                   # only your messages
+shenron search "Error" --type assistant             # only Claude's responses
+shenron search "def \w+\(" --regex                  # regex search
+shenron search "封号|appeal" --regex                # regex OR
 shenron search "secret" --case-sensitive
-shenron search "api" --project myproject    # scope to one project
-shenron search "bug" -n 100 -C 120         # 100 results, 120-char context
+shenron search "api" --project myproject            # scope to one project
+shenron search "bug" --model opus                   # filter by model
+shenron search "fix" --after 2026-03-01             # recent sessions only
+shenron search "bug" -n 100 -C 120                 # 100 results, 120-char context
 ```
+
+> **Tip:** `rg` (ripgrep) is optional but recommended. If installed, search is
+> ~10x faster on large histories. Without it, Shenron falls back to pure Python
+> scanning — still works, just slower.
+>
+> Install: `brew install ripgrep`
 
 ### `shenron stats` — Cost & usage dashboard
 
@@ -130,19 +144,21 @@ shenron stats --subscription 200    # custom plan cost for multiplier
 ╭─────────────────────── shenron stats ────────────────────────╮
 │ Claude Code — Equivalent API Cost                             │
 │                                                               │
-│   Input tokens:    158K                                       │
-│   Output tokens:   1.9M                                       │
-│   Cache reads:     634.8M                                     │
-│   Total sessions:  67                                         │
+│   Input tokens:    197K                                       │
+│   Output tokens:   4.5M                                       │
+│   Cache writes:    45.6M                                      │
+│   Cache reads:     1259.8M                                    │
+│   Total sessions:  87                                         │
+│   Total messages:  27,098                                     │
 │                                                               │
-│   Equivalent cost: $1,435.67                                  │
-│   vs Max $100/mo:  14.4x value                                │
+│   Equivalent cost: $1,877.22                                  │
+│   vs Max $100/mo:  18.8x value                                │
 ╰───────────────────────────────────────────────────────────────╯
 
   Project                  Sessions   Input   Output   Cost (est.)   Share
  ────────────────────────────────────────────────────────────────────────
-  ~/Desktop/crypto/…            16    135K     1.4M     $1115.12    ████████████ 77.7%
-  ~/                            21     23K     436K      $272.06    ███░░░░░░░░░ 18.9%
+  ~/Desktop/crypto/…            24    144K     2.4M     $1289.70    ████████████ 68.7%
+  ~/                            32     52K     1.9M      $505.53    █████░░░░░░░ 26.9%
   ...
 ```
 
@@ -258,17 +274,46 @@ Each line is a JSON message (`user`, `assistant`, `system`, etc.).
 Shenron streams these files — **no database, no indexing, O(1) memory** —
 and renders the results with Rich.
 
+### Search architecture
+
+```
+shenron search "keyword" --model opus --type user
+        │
+        ▼
+   ┌─────────┐    rg --files-with-matches     ┌──────────────┐
+   │ ripgrep  │ ──────────────────────────────▶│ matched files │
+   └─────────┘    (skip 90% of files)          └──────┬───────┘
+                                                      │
+                                                      ▼
+                                              ┌───────────────┐
+                                              │ Python parser  │
+                                              │ • role filter  │
+                                              │ • model filter │
+                                              │ • AND logic    │
+                                              │ • context      │
+                                              └───────┬───────┘
+                                                      │
+                                                      ▼
+                                              ┌───────────────┐
+                                              │ Rich renderer  │
+                                              │ • highlights   │
+                                              │ • interactive  │
+                                              └───────────────┘
+```
+
 ---
 
 ## Performance
 
-| Scenario | Time |
-|----------|------|
-| `shenron list` (67 sessions) | ~0.3s |
-| `shenron search "docker"` (67 sessions, 13K messages) | ~0.5s |
-| `shenron stats` (67 sessions) | ~0.4s |
+| Scenario | Time | Engine |
+|----------|------|--------|
+| `shenron list` (87 sessions) | ~0.3s | Python streaming |
+| `shenron search "keyword"` (87 sessions, 27K messages) | ~0.2s | rg pre-filter + Python |
+| `shenron search "word1" "word2"` (AND logic) | ~0.4s | rg pre-filter + Python |
+| `shenron stats` (87 sessions) | ~0.4s | Python streaming |
 
-No background daemon. No SQLite. Just fast streaming.
+No background daemon. No SQLite. No indexing.
+Search uses ripgrep for file-level pre-filtering, then Python for structured message parsing — fast *and* smart.
 
 ---
 

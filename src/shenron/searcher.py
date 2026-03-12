@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from shenron.grepper import grep_file_filter
 from shenron.models import Message, SessionMeta
 from shenron.parser import stream_messages
 
@@ -57,6 +58,9 @@ def search(
     """
     Search across sessions for terms (AND logic), yielding (session_meta, [results]) per session.
 
+    Uses ripgrep as a pre-filter to skip non-matching files (fast path).
+    Falls back to full Python scan if rg is unavailable.
+
     Multiple terms: a message must contain ALL terms to match.
     Results are anchored to the first term's match position for context display.
     Generator — results are yielded as found. Stops after `limit` total matches.
@@ -65,11 +69,27 @@ def search(
     default_types = {"user", "assistant"}
     filter_types = message_types or default_types
 
+    # ── Fast path: use rg to narrow down which files to scan ──
+    # Build a combined pattern for rg pre-filter (any term = potential match)
+    rg_matched_files: set | None = None
+    if not regex:
+        # For literal terms, use rg to find files containing the first term
+        # (rg is much faster than Python for scanning large JSONL files)
+        rg_matched_files = grep_file_filter(
+            pattern=terms[0],
+            case_insensitive=not case_sensitive,
+            fixed_strings=True,
+        )
+
     total_matches = 0
 
     for meta in sessions:
         if total_matches >= limit:
             break
+
+        # Skip files that rg already confirmed don't contain the pattern
+        if rg_matched_files is not None and meta.file_path not in rg_matched_files:
+            continue
 
         session_results: list[SearchResult] = []
 
