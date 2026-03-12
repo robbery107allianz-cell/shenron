@@ -113,9 +113,10 @@ def search(
             if not all(p.search(text) for p in patterns):
                 continue
 
-            # Iterate matches of the first pattern for context display
-            for match in patterns[0].finditer(text):
-                before, matched, after = _extract_context(text, match, context_chars)
+            # One match per message — take the first hit for context display
+            first_match = patterns[0].search(text)
+            if first_match:
+                before, matched, after = _extract_context(text, first_match, context_chars)
                 session_results.append(
                     SearchResult(
                         session_meta=meta,
@@ -126,8 +127,6 @@ def search(
                     )
                 )
                 total_matches += 1
-                if total_matches >= limit:
-                    break
 
         if session_results:
             yield meta, session_results

@@ -19,7 +19,7 @@ from shenron.formatter import (
     print_session_list,
     print_stats,
 )
-from shenron.models import SessionMeta
+from shenron.models import Session, SessionMeta
 from shenron.parser import parse_session, parse_session_meta_fields, stream_messages
 
 app = typer.Typer(
@@ -153,6 +153,8 @@ def show(
     thinking: Annotated[bool, typer.Option("--thinking/--no-thinking", help="Include thinking blocks")] = False,
     tools: Annotated[bool, typer.Option("--tools/--no-tools", help="Include tool calls")] = True,
     limit: Annotated[int | None, typer.Option("--limit", "-n", help="Show only first N messages")] = None,
+    grep: Annotated[str | None, typer.Option("--grep", "-g", help="Filter messages containing keyword")] = None,
+    context: Annotated[int, typer.Option("--context", "-C", help="Messages of context around grep match")] = 1,
     raw: Annotated[bool, typer.Option("--raw", help="Show raw JSONL")] = False,
 ) -> None:
     """Display a session in readable format."""
@@ -169,6 +171,30 @@ def show(
         return
 
     session = parse_session(meta)
+
+    if grep:
+        # Filter messages: show only those containing the keyword, plus context
+        import re
+        pattern = re.compile(re.escape(grep), re.IGNORECASE)
+        all_msgs = session.messages
+        matched_indices: set[int] = set()
+        for i, msg in enumerate(all_msgs):
+            if msg.content_text and pattern.search(msg.content_text):
+                for j in range(max(0, i - context), min(len(all_msgs), i + context + 1)):
+                    matched_indices.add(j)
+        filtered = tuple(all_msgs[i] for i in sorted(matched_indices))
+        session = Session(
+            meta=session.meta,
+            messages=filtered,
+            cwd=session.cwd,
+            git_branch=session.git_branch,
+            version=session.version,
+            first_timestamp=session.first_timestamp,
+            last_timestamp=session.last_timestamp,
+        )
+        console.print(f"  [dim]Filtered by:[/dim] [bold yellow]{grep}[/bold yellow]  "
+                       f"[dim]({len(filtered)}/{len(all_msgs)} messages)[/dim]\n")
+
     print_session_detail(session, include_thinking=thinking, limit=limit)
 
 
@@ -282,13 +308,14 @@ def search(
     query_display = " AND ".join(query)
     matched_sessions, total_matches = print_search_results(results_iter, query=query_display, total_limit=limit)
 
-    # Interactive follow-up: open a session for full view
-    if total_matches > 0 and len(matched_sessions) > 0:
+    # Interactive follow-up: open a session for full view (only in TTY)
+    import sys
+    if total_matches > 0 and len(matched_sessions) > 0 and sys.stdin.isatty():
         console.print()
         choices = "/".join(str(i + 1) for i in range(len(matched_sessions)))
-        raw = console.input(f"  [dim]Open session ❲{choices}❳ or Enter to exit: [/dim]").strip()
-        if raw.isdigit():
-            idx = int(raw) - 1
+        raw_input = console.input(f"  [dim]Open session ❲{choices}❳ or Enter to exit: [/dim]").strip()
+        if raw_input.isdigit():
+            idx = int(raw_input) - 1
             if 0 <= idx < len(matched_sessions):
                 chosen = matched_sessions[idx]
                 from shenron.parser import parse_session
