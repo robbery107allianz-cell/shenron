@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from shenron.searcher import SearchResult
-    from shenron.stats import StatsReport
+    from shenron.stats import StatsReport, WeeklyReport
 
 console = Console(highlight=False)
 
@@ -362,6 +362,99 @@ def print_stats(report: "StatsReport", subscription_usd: float = 100.0) -> None:
             _fmt_cost(g.cost_usd),
             f"{bar} {pct}",
         )
+
+    console.print(table)
+    console.print()
+
+
+# ─── Weekly Model Breakdown ──────────────────────────────────────────────────
+
+def print_weekly(report: "WeeklyReport", subscription_usd: float = 100.0) -> None:
+    """Render the weekly Opus vs Sonnet breakdown table."""
+
+    # ── Header panel ──
+    t = report.total
+    header_lines = [
+        "[bold cyan]Weekly Model Breakdown — Opus vs Sonnet[/bold cyan]",
+        "[dim](Shows per-week model usage distribution across all sessions.)[/dim]",
+        "",
+        f"  Total weeks:     [bold]{len(report.rows)}[/bold]",
+        f"  Total sessions:  [bold]{t.total_sessions}[/bold]",
+        f"  Opus sessions:   [bold]{t.opus_sessions}[/bold]   "
+        f"Sonnet: [bold]{t.sonnet_sessions}[/bold]   "
+        f"Other: [bold]{t.other_sessions}[/bold]",
+        "",
+        f"  Opus output:     [bold]{_fmt_tokens(t.opus_output)}[/bold]  "
+        f"({t.opus_output_pct:.1f}%)",
+        f"  Sonnet output:   [bold]{_fmt_tokens(t.sonnet_output)}[/bold]  "
+        f"({100 - t.opus_output_pct:.1f}%)" if t.total_output else "",
+        "",
+        f"  Opus cost:       [bold green]{_fmt_cost(t.opus_cost)}[/bold green]  "
+        f"({t.opus_cost_pct:.1f}%)",
+        f"  Sonnet cost:     [bold green]{_fmt_cost(t.sonnet_cost)}[/bold green]  "
+        f"({100 - t.opus_cost_pct:.1f}%)" if t.total_cost else "",
+    ]
+    console.print()
+    console.print(Panel(
+        "\n".join(line for line in header_lines if line is not None),
+        title="[bold]shenron weekly[/bold]",
+        border_style="cyan",
+    ))
+    console.print()
+
+    if not report.rows:
+        return
+
+    # ── Weekly table ──
+    table = Table(
+        box=box.SIMPLE_HEAD,
+        show_header=True,
+        header_style="bold cyan",
+        expand=False,
+        pad_edge=True,
+    )
+    table.add_column("Week", no_wrap=True, style="cyan")
+    table.add_column("Dates", no_wrap=True, style="dim")
+    table.add_column("Opus", justify="right", style="bold magenta")
+    table.add_column("Son.", justify="right")
+    table.add_column("Opus Out", justify="right")
+    table.add_column("Son. Out", justify="right")
+    table.add_column("Opus%", justify="right", style="bold yellow")
+    table.add_column("Cost($)", justify="right")
+
+    def _compact_cost(usd: float) -> str:
+        if usd >= 1000:
+            return f"{usd / 1000:.1f}K"
+        if usd >= 1.0:
+            return f"{usd:.0f}"
+        return f"{usd:.2f}"
+
+    for r in report.rows:
+        opus_pct_str = f"{r.opus_output_pct:.0f}%" if r.total_output else "—"
+
+        table.add_row(
+            r.week,
+            r.date_range,
+            str(r.opus_sessions),
+            str(r.sonnet_sessions),
+            _fmt_tokens(r.opus_output),
+            _fmt_tokens(r.sonnet_output),
+            opus_pct_str,
+            _compact_cost(r.total_cost),
+        )
+
+    # Totals row
+    table.add_section()
+    table.add_row(
+        "[bold]TOTAL[/bold]",
+        "",
+        f"[bold]{t.opus_sessions}[/bold]",
+        f"[bold]{t.sonnet_sessions}[/bold]",
+        f"[bold]{_fmt_tokens(t.opus_output)}[/bold]",
+        f"[bold]{_fmt_tokens(t.sonnet_output)}[/bold]",
+        f"[bold]{t.opus_output_pct:.0f}%[/bold]",
+        f"[bold]{_compact_cost(t.total_cost)}[/bold]",
+    )
 
     console.print(table)
     console.print()

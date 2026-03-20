@@ -24,6 +24,7 @@ with no way to search it.
 - **Search** your entire Claude Code history — ripgrep-accelerated, with keywords, regex, or multi-term AND
 - **Browse** sessions with readable conversation formatting
 - **Track** token usage and equivalent API costs across all projects
+- **Weekly** Opus vs Sonnet usage breakdown — see your model mix trend per week
 - **Export** any session to Markdown, JSON, or HTML
 - **Resume** any past session instantly with `claude --resume`
 - **Digest** any session into a structured decisions log — topic, key decisions, closing context
@@ -71,6 +72,9 @@ claude --resume $(shenron resume)
 
 # Distill latest session into a decisions log
 shenron digest --append ~/decisions.md
+
+# Weekly Opus vs Sonnet breakdown
+shenron weekly
 
 # See what topics are hot right now vs your full history
 shenron focus
@@ -134,6 +138,7 @@ shenron search "bug" -n 100 -C 120                 # 100 results, 120-char conte
 shenron stats                       # grouped by project (default)
 shenron stats --by model            # grouped by model
 shenron stats --by date             # grouped by day
+shenron stats --by week             # grouped by ISO week
 shenron stats --top 5               # top 5 groups
 shenron stats --after 2026-03-01    # this month only
 shenron stats --subscription 200    # custom plan cost for multiplier
@@ -165,6 +170,38 @@ shenron stats --subscription 200    # custom plan cost for multiplier
 > **Note:** Claude Max subscribers pay a flat monthly fee. The "Equivalent API Cost" shows
 > what the same token consumption would cost at pay-as-you-go API rates — so you can see
 > your actual subscription value.
+
+### `shenron weekly` — Opus vs Sonnet weekly breakdown
+
+Shows per-week model distribution so you can track your Opus/Sonnet usage
+trend over time — the local equivalent of the Claude Max web dashboard.
+
+```
+shenron weekly                         # all weeks
+shenron weekly --after 2026-03-01      # this month only
+shenron weekly --project myproject     # scope to one project
+```
+
+**Sample output:**
+```
+╭──────────────────── shenron weekly ────────────────────╮
+│ Weekly Model Breakdown — Opus vs Sonnet                 │
+│                                                         │
+│   Total weeks:     5                                    │
+│   Opus sessions:   56   Sonnet: 22   Other: 12          │
+│   Opus output:     3.4M  (52.6%)                        │
+│   Sonnet output:   2.9M  (47.4%)                        │
+╰─────────────────────────────────────────────────────────╯
+
+  Week       Dates         Opus  Son.  Opus Out  Son. Out  Opus%  Cost($)
+ ─────────────────────────────────────────────────────────────────────────
+  2026-W09   02/23-03/01      9     0      634K        0   100%     558
+  2026-W10   03/02-03/08     22    10      1.1M     1.5M    41%    1.1K
+  2026-W11   03/09-03/15      8     9      1.1M     1.5M    42%    1.3K
+  2026-W12   03/16-03/22     16     0      671K        0    85%     913
+
+  TOTAL                      56    22      3.4M     2.9M    53%    3.8K
+```
 
 ### `shenron export <id>` — Export a session
 

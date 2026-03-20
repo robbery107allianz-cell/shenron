@@ -18,6 +18,7 @@ from shenron.formatter import (
     print_session_detail,
     print_session_list,
     print_stats,
+    print_weekly,
 )
 from shenron.models import Session, SessionMeta
 from shenron.parser import parse_session, parse_session_meta_fields, stream_messages
@@ -328,7 +329,7 @@ def search(
 
 @app.command()
 def stats(
-    group_by: Annotated[str, typer.Option("--by", "-b", help="Group by: project|model|date")] = "project",
+    group_by: Annotated[str, typer.Option("--by", "-b", help="Group by: project|model|date|week")] = "project",
     top: Annotated[int, typer.Option("--top", "-t", help="Show top N groups")] = DEFAULT_TOP_N,
     project: Annotated[str | None, typer.Option("--project", "-p", help="Filter by project name")] = None,
     after: Annotated[str | None, typer.Option("--after", help="Sessions after date (YYYY-MM-DD)")] = None,
@@ -341,8 +342,8 @@ def stats(
     after_dt = _parse_date(after, "after")
     before_dt = _parse_date(before, "before")
 
-    if group_by not in ("project", "model", "date"):
-        console.print("[red]--by must be one of: project, model, date[/red]")
+    if group_by not in ("project", "model", "date", "week"):
+        console.print("[red]--by must be one of: project, model, date, week[/red]")
         raise typer.Exit(1)
 
     sessions = list(_discover_sessions(
@@ -357,6 +358,33 @@ def stats(
 
     report = compute_stats(sessions, group_by=group_by, top_n=top)
     print_stats(report, subscription_usd=subscription)
+
+
+@app.command()
+def weekly(
+    project: Annotated[str | None, typer.Option("--project", "-p", help="Filter by project name")] = None,
+    after: Annotated[str | None, typer.Option("--after", help="Sessions after date (YYYY-MM-DD)")] = None,
+    before: Annotated[str | None, typer.Option("--before", help="Sessions before date (YYYY-MM-DD)")] = None,
+    subscription: Annotated[float, typer.Option("--subscription", help="Monthly subscription cost USD")] = 100.0,
+) -> None:
+    """Show weekly Opus vs Sonnet usage breakdown."""
+    from shenron.stats import compute_weekly_breakdown
+
+    after_dt = _parse_date(after, "after")
+    before_dt = _parse_date(before, "before")
+
+    sessions = list(_discover_sessions(
+        project_filter=project,
+        after=after_dt,
+        before=before_dt,
+    ))
+
+    if not sessions:
+        console.print("\n  [yellow]No sessions found.[/yellow]\n")
+        return
+
+    report = compute_weekly_breakdown(sessions)
+    print_weekly(report, subscription_usd=subscription)
 
 
 @app.command()
