@@ -124,6 +124,35 @@ shenron compile --dry-run                      # preview without writing
 | Enrichment protection | Files manually enriched (no "stub" marker) keep their content; only frontmatter is updated |
 | Archaeological protection | Files with `source: archaeological-recovery` are never overwritten |
 
+**Viewing in Obsidian:**
+
+The compiled wiki is a plain folder of `.md` files with `[[wikilinks]]` — Obsidian
+reads it natively with zero configuration:
+
+```bash
+# 1. Compile your sessions
+shenron compile --all --output ~/my-wiki
+
+# 2. Open in Obsidian
+#    Launch Obsidian → "Open folder as vault" → select ~/my-wiki
+#    Or from terminal (macOS):
+open -a Obsidian ~/my-wiki
+```
+
+Once opened, you get for free:
+- **Graph View** — visual knowledge graph of sessions ↔ concepts (Ctrl/Cmd+G)
+- **Backlinks** — click any concept to see every session that mentions it
+- **Search** — Obsidian's built-in full-text search across all compiled notes
+- **Daily Notes** — session digests are date-named, compatible with Obsidian's calendar plugins
+
+No Obsidian plugins are required. The vault works with default settings. If you
+want to customize the graph (colors, groups), edit `.obsidian/graph.json` — but
+it's entirely optional.
+
+> **Don't have Obsidian?** The output is standard Markdown. You can browse it
+> with any text editor, VS Code, or even `cat`. Obsidian just makes the
+> wikilinks and graph clickable.
+
 ### `shenron list` — Browse sessions
 
 ```
