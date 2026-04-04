@@ -485,7 +485,9 @@ def digest(
 def compile(
     session_id: Annotated[str | None, typer.Argument(help="Session UUID or prefix (omit for --all)")] = None,
     project: Annotated[str | None, typer.Option("--project", "-p", help="Filter by project name")] = None,
-    output: Annotated[str, typer.Option("--output", "-o", help="Wiki output directory")] = str(Path.home() / "Code-Rob-Wiki"),
+    output: Annotated[
+        str, typer.Option("--output", "-o", help="Wiki output directory"),
+    ] = str(Path.home() / "Code-Rob-Wiki"),
     all_sessions: Annotated[bool, typer.Option("--all", "-a", help="Compile all sessions")] = False,
     after: Annotated[str | None, typer.Option("--after", help="Sessions after date (YYYY-MM-DD)")] = None,
     before: Annotated[str | None, typer.Option("--before", help="Sessions before date (YYYY-MM-DD)")] = None,
@@ -549,7 +551,7 @@ def compile(
     from shenron.compiler import merge_by_day
     digests = merge_by_day(compilations)
 
-    console.print(f"\n  [bold green]Compilation complete:[/bold green]")
+    console.print("\n  [bold green]Compilation complete:[/bold green]")
     console.print(f"    Sessions: {len(compilations)} → {len(digests)} daily digests")
     console.print(f"    Concepts: {len(concepts)}")
 
@@ -559,8 +561,8 @@ def compile(
     console.print(f"    Status:   ● mature={mature}  ◐ growing={growing}  ○ stub={stub}")
 
     if dry_run:
-        console.print(f"\n  [yellow]Dry run — no files written.[/yellow]\n")
-        console.print(f"  [dim]Top concepts:[/dim]")
+        console.print("\n  [yellow]Dry run — no files written.[/yellow]\n")
+        console.print("  [dim]Top concepts:[/dim]")
         for node in sorted(concepts.values(), key=lambda n: n.mention_count, reverse=True)[:15]:
             console.print(f"    {node.mention_count:3d}× {node.name} ({node.status})")
         console.print()

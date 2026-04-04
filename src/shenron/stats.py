@@ -1,8 +1,8 @@
 """Token usage and equivalent API cost aggregation."""
 
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from shenron.models import SessionMeta, TokenUsage
 from shenron.parser import stream_messages
@@ -155,7 +155,7 @@ def _week_label(iso_year: int, iso_week: int) -> str:
 
 def _week_date_range(iso_year: int, iso_week: int) -> tuple[str, str]:
     """Return (Mon date, Sun date) strings for an ISO week."""
-    jan4 = datetime(iso_year, 1, 4, tzinfo=timezone.utc)
+    jan4 = datetime(iso_year, 1, 4, tzinfo=UTC)
     start_of_w1 = jan4 - timedelta(days=jan4.weekday())
     mon = start_of_w1 + timedelta(weeks=iso_week - 1)
     sun = mon + timedelta(days=6)

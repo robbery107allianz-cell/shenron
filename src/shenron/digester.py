@@ -7,8 +7,7 @@ Identifies: session topic, key decision moments, closing conclusions.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
 
 from shenron.models import Message, Session
 
@@ -105,9 +104,7 @@ def digest_session(session: Session, tail_n: int = 3, max_key: int = 8) -> Diges
             "The file ", "File created", "Found ", "No files found",
             "Usage: ", "Error:", "[", "{",
         )
-        if any(u_text.startswith(p) for p in tool_output_prefixes):
-            return False
-        return True
+        return not any(u_text.startswith(p) for p in tool_output_prefixes)
 
     # Key exchanges: pairs where user OR assistant text contains decision signals
     key_exchanges: list[KeyExchange] = []

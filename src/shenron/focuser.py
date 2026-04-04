@@ -11,7 +11,6 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from shenron.models import SessionMeta
 from shenron.parser import stream_messages
@@ -36,9 +35,9 @@ _STOP_ZH_WORDS = {
     "创建", "删除", "修改", "查看", "检查", "测试", "部署", "发布",
     "代码", "函数", "变量", "参数", "返回", "调用", "接口", "模块",
     "数据库", "服务器", "客户端", "请求", "响应", "错误", "日志",
-    "版本", "更新", "升级", "依赖", "环境", "路径", "格式", "类型",
+    "版本", "升级", "依赖", "环境", "路径", "格式", "类型",
     "方法", "属性", "对象", "实例", "继承", "实现", "定义", "声明",
-    "导入", "导出", "编译", "构建", "打包", "部署", "监控", "报警",
+    "导入", "导出", "编译", "构建", "打包", "监控", "报警",
     "任务", "进程", "线程", "队列", "缓存", "索引", "查询", "过滤",
     "加载", "保存", "读取", "写入", "解析", "渲染", "转换", "处理",
     "工具", "插件", "框架", "库", "包", "组件", "模板", "脚本",
@@ -60,7 +59,7 @@ _STOP_EN = {
     "over", "back", "want", "take", "give", "keep", "look", "work",
     # ── Python language keywords & builtins
     "self", "none", "true", "false", "null", "import", "return",
-    "class", "elif", "else", "pass", "with", "from", "raise", "yield",
+    "class", "elif", "else", "pass", "raise", "yield",
     "async", "await", "lambda", "global", "nonlocal", "assert", "del",
     "isinstance", "type", "repr", "iter", "next", "list", "dict",
     "tuple", "print", "open", "range", "super", "object", "args",
@@ -72,40 +71,37 @@ _STOP_EN = {
     # ── General dev / tool nouns
     "code", "file", "files", "line", "lines", "path", "text", "read",
     "write", "data", "user", "users", "step", "steps", "test", "tests",
-    "docs", "note", "notes", "todo", "type", "mode", "flag", "keys",
-    "args", "opts", "logs", "log", "run", "runs", "call", "calls",
+    "docs", "note", "notes", "todo", "mode", "flag", "keys",
+    "opts", "logs", "log", "run", "runs", "call", "calls",
     "func", "param", "params", "value", "values", "item", "items",
-    "name", "names", "info", "list", "dict", "node", "root", "base",
-    "true", "false", "null", "none", "bool", "int", "str", "var",
+    "names", "info", "node", "root", "base",
+    "bool", "int", "str", "var",
     "config", "setup", "build", "built", "tool", "tools", "task",
     "tasks", "repo", "push", "pull", "diff", "branch", "merge",
     "commit", "patch", "sync", "load", "save", "send", "recv",
-    "open", "close", "start", "stop", "init", "done", "fail",
-    "pass", "skip", "next", "prev", "curr", "last", "first",
+    "close", "start", "stop", "fail",
+    "skip", "prev", "curr", "last", "first",
     "output", "input", "result", "results", "check", "error",
     "debug", "trace", "stack", "heap", "port", "host", "addr",
     "token", "tokens", "block", "chunk", "byte", "bytes", "size",
-    "count", "total", "index", "offset", "limit", "range",
-    "command", "commands", "option", "options", "param", "params",
-    "module", "package", "install", "release", "version", "update",
+    "count", "total", "index", "offset", "limit", "command", "commands",
+    "option", "options", "module", "package", "install", "release", "version", "update",
     "request", "response", "handler", "router", "server", "client",
     "socket", "proto", "http", "https", "json", "yaml", "toml",
-    "class", "method", "function", "variable", "instance", "object",
-    "interface", "struct", "field", "schema", "model", "query",
-    "insert", "select", "delete", "create", "table", "index",
-    "cache", "queue", "event", "loop", "thread", "mutex", "lock",
-    "import", "export", "require", "include", "define", "declare",
+    "method", "function", "variable", "instance", "interface", "struct", "field", "schema", "model", "query",
+    "insert", "select", "delete", "create", "table", "cache", "queue", "event", "loop", "thread", "mutex", "lock",
+    "require", "include", "define", "declare",
     "phase", "stage", "layer", "level", "tier", "rank", "order",
     "parse", "render", "format", "encode", "decode", "hash",
     "match", "find", "sort", "filter", "reduce", "apply", "bind",
     "wrap", "hook", "emit", "listen", "watch", "poll", "fetch",
-    "test", "spec", "mock", "stub", "fixture", "assert", "expect",
-    "source", "target", "dest", "origin", "remote", "local",
-    "stdin", "stdout", "stream", "buffer", "frame", "packet",
-    "symbol", "token", "literal", "keyword", "operator", "syntax",
+    "spec", "mock", "stub", "fixture", "expect",
+    "target", "dest", "origin", "remote", "local",
+    "stream", "buffer", "frame", "packet",
+    "symbol", "literal", "keyword", "operator", "syntax",
     # ── Path / env noise
     "titans", "home", "library", "desktop", "bots", "framework",
-    "venv", "site", "packages", "dist", "temp", "cache",
+    "venv", "site", "packages", "dist", "temp",
     # ── Tool output noise
     "successfully", "updated", "created", "showing", "matches",
     "session", "sessions", "failed", "warning", "message", "messages",
@@ -287,10 +283,7 @@ def analyze_with_baseline(
     for term, r_count in recent_counter.most_common(top_n * 2):
         r_rate = r_count / n_recent
         b_rate = all_counter.get(term, 0) / n_all
-        if b_rate == 0:
-            uplift = r_rate * 10  # new term, high signal
-        else:
-            uplift = r_rate / b_rate
+        uplift = r_rate * 10 if b_rate == 0 else r_rate / b_rate
         spikes.append((term, uplift))
 
     spikes.sort(key=lambda x: x[1], reverse=True)
@@ -314,7 +307,7 @@ def render_markdown(report: FocusReport) -> str:
     ts = report.generated_at.strftime("%Y-%m-%d %H:%M UTC")
     window = f"{report.hours_window}h" if report.hours_window > 0 else "全量历史"
     lines = [
-        f"## 当前聚焦 · Focus Weights",
+        "## 当前聚焦 · Focus Weights",
         f"> 更新: {ts} · 扫描窗口: {window} · "
         f"{report.sessions_scanned} sessions · {report.messages_scanned} 条消息",
         "",
@@ -337,12 +330,12 @@ def render_full_markdown(
     ts = recent.generated_at.strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
-        f"## Focus Weights · 注意力权重",
+        "## Focus Weights · 注意力权重",
         f"> 更新: {ts}",
         "",
         # ── Section 1: Spikes (the most actionable signal)
         f"### 近期热词 · Spikes（过去{recent.hours_window}h vs 全量基线）",
-        f"> 相对基线的上升倍数 — 数值越高说明这个词今天异常活跃",
+        "> 相对基线的上升倍数 — 数值越高说明这个词今天异常活跃",
         "",
         "| # | 关键词 | 上升倍数 |",
         "|---|--------|---------|",

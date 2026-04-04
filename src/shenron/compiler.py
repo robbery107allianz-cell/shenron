@@ -16,14 +16,12 @@ Layer 2 (model, future):
 from __future__ import annotations
 
 import re
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from shenron.digester import _has_signal, _pair_messages, _truncate
-from shenron.models import Message, Session, SessionMeta
-from shenron.parser import parse_session, parse_session_meta_fields
+from shenron.digester import _has_signal, _truncate
+from shenron.models import Message, Session
 from shenron.pricing import compute_cost
 
 # ─── Entity dictionary ───────────────────────────────────────────────────────
@@ -119,7 +117,7 @@ _STRATEGY_SIGNALS = re.compile(
 )
 
 
-def _compute_weight(session: "Session", file_change_count: int) -> str:
+def _compute_weight(session: Session, file_change_count: int) -> str:
     """Determine session weight: ops / dev / strategy.
 
     Logic:
@@ -575,7 +573,10 @@ def render_session_md(cs: CompiledSession) -> str:
     title = cs.topic_sentence[:60] if cs.topic_sentence else cs.date
     lines.append(f"# {weight_icon} Session: {title}")
     lines.append("")
-    lines.append(f"**权重**: {weight_icon} {cs.weight} · **消息**: {cs.user_message_count} · **成本**: ${cs.cost_usd:.2f}")
+    lines.append(
+        f"**权重**: {weight_icon} {cs.weight} · "
+        f"**消息**: {cs.user_message_count} · **成本**: ${cs.cost_usd:.2f}"
+    )
     lines.append("")
 
     # Entities as wikilinks
@@ -682,8 +683,8 @@ def render_index_md(
 
     lines.append("## 统计")
     lines.append("")
-    lines.append(f"| 指标 | 值 |")
-    lines.append(f"|------|-----|")
+    lines.append("| 指标 | 值 |")
+    lines.append("|------|-----|")
     lines.append(f"| 已编译 session | {len(compilations)} |")
     lines.append(f"| 总对话轮数 | {total_user_msgs} |")
     lines.append(f"| 等价 API 成本 | ${total_cost:,.2f} |")
