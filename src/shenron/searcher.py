@@ -3,6 +3,7 @@
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import Path
 
 from shenron.grepper import grep_file_filter
 from shenron.models import Message, SessionMeta
@@ -54,6 +55,7 @@ def search(
     model_filter: str | None = None,
     limit: int = 50,
     context_chars: int = 80,
+    projects_dir: Path | None = None,
 ) -> Iterator[tuple[SessionMeta, list[SearchResult]]]:
     """
     Search across sessions for terms (AND logic), yielding (session_meta, [results]) per session.
@@ -69,14 +71,16 @@ def search(
     default_types = {"user", "assistant"}
     filter_types = message_types or default_types
 
+    # Infer projects_dir from the first session if not provided
+    if projects_dir is None and sessions:
+        projects_dir = sessions[0].file_path.parent.parent
+
     # ── Fast path: use rg to narrow down which files to scan ──
-    # Build a combined pattern for rg pre-filter (any term = potential match)
     rg_matched_files: set | None = None
-    if not regex:
-        # For literal terms, use rg to find files containing the first term
-        # (rg is much faster than Python for scanning large JSONL files)
+    if not regex and projects_dir is not None:
         rg_matched_files = grep_file_filter(
             pattern=terms[0],
+            projects_dir=projects_dir,
             case_insensitive=not case_sensitive,
             fixed_strings=True,
         )
