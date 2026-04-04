@@ -311,7 +311,7 @@ shenron stats --by date      → 按日期的活跃趋势
 - **口号**："召唤神龙，回忆一切。"（Summon the Dragon. Recall everything.）
 - **姐妹工具**：Kaioshin 界王神（沙箱安全）— 同属龙珠宇宙工具套件
 - **作者**：小code & Rob
-- **开源协议**：MIT
+- **开源协议**：AGPL-3.0
 - **博客**：robbery.blog
 - **GitHub**：robbery107allianz-cell/shenron
 

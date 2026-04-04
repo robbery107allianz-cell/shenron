@@ -7,7 +7,7 @@ name = "shenron"
 version = "0.1.0"
 description = "Shenron 神龍 — Search, browse, and analyse your Claude Code session history"
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [
@@ -18,7 +18,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Utilities",

@@ -8,7 +8,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/shenron.svg)](https://pypi.org/project/shenron/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
-[![License: MIT](10_System/Constitution/nomos/LICENSE.md)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Tests](https://github.com/robbery107allianz-cell/shenron/actions/workflows/ci.yml/badge.svg)](https://github.com/robbery107allianz-cell/shenron/actions)
 
 ---
@@ -21,6 +21,7 @@ with no way to search it.
 
 **Shenron** gives you that power:
 
+- **Compile** sessions into an Obsidian wiki — entity extraction, weight classification, daily digests, concept graphs
 - **Search** your entire Claude Code history — ripgrep-accelerated, with keywords, regex, or multi-term AND
 - **Browse** sessions with readable conversation formatting
 - **Track** token usage and equivalent API costs across all projects
@@ -70,6 +71,9 @@ shenron export abc12345 -f markdown -o session.md
 # Resume the latest session
 claude --resume $(shenron resume)
 
+# Compile all sessions into an Obsidian wiki
+shenron compile --all
+
 # Distill latest session into a decisions log
 shenron digest --append ~/decisions.md
 
@@ -83,6 +87,42 @@ shenron focus
 ---
 
 ## Commands
+
+### `shenron compile` — Compile sessions into an Obsidian wiki
+
+The knowledge compiler. Transforms raw JSONL sessions into a structured,
+searchable Obsidian vault with wikilinks, concept nodes, and a visual graph.
+
+```
+shenron compile --all                          # compile all sessions
+shenron compile abc12345                       # compile a single session
+shenron compile --all --after 2026-03-01       # recent sessions only
+shenron compile --all --output ~/my-wiki       # custom output directory
+shenron compile --dry-run                      # preview without writing
+```
+
+**What it produces:**
+
+```
+~/Code-Rob-Wiki/
+├── sessions/           ← daily digests (multiple sessions merged per day)
+│   └── 2026-03-15.md   ← entities, key points, file changes, weight
+├── concepts/           ← cross-session concept nodes (auto-extracted)
+│   └── 四星球.md        ← definition stub + evolution trail + wikilinks
+├── ideas/              ← incubator for unnamed ideas
+└── INDEX.md            ← master index with weight distribution
+```
+
+**Key design decisions:**
+
+| Feature | How |
+|---------|-----|
+| Entity extraction | Seed dictionary matching against USER messages only (system messages contain MEMORY.md which would match everything) |
+| Weight system | Three layers: ★ strategy (research/ideas), ● dev (code/iteration), ○ ops (checks/confirmations) |
+| Density filtering | High-frequency entities need 3+ mentions to link; rare entities need 1 |
+| Daily merge | Multiple sessions from the same day → one daily digest node |
+| Enrichment protection | Files manually enriched (no "stub" marker) keep their content; only frontmatter is updated |
+| Archaeological protection | Files with `source: archaeological-recovery` are never overwritten |
 
 ### `shenron list` — Browse sessions
 
@@ -361,12 +401,14 @@ the Supreme Kai security sandbox for Claude Code.
 
 | Tool | Dragon Ball | Role |
 |------|-------------|------|
-| [Kaioshin](https://github.com/robbery107allianz-cell/kaioshin) | 界王神 Supreme Kai | Kernel-level security sandbox |
-| Shenron | 神龍 Eternal Dragon | Session history & analytics |
+| [Kaioshin](https://github.com/robbery107allianz-cell/kaioshin) | 界王神 Supreme Kai | Read-only security audit |
+| Shenron | 神龍 Eternal Dragon | Session history & knowledge compiler |
+| Code-Rob-Wiki | 龙珠雷达 Dragon Radar | Obsidian vault — Shenron's compiled output |
 
 ```
-kaioshin  →  keeps Claude safe while it works
-shenron   →  remembers everything Claude did
+kaioshin      →  keeps Claude safe while it works
+shenron       →  remembers everything Claude did
+code-rob-wiki →  the living knowledge graph that grows from every session
 ```
 
 ---
@@ -382,10 +424,37 @@ pytest --cov
 
 ---
 
+## Acknowledgments
+
+The **compile** module — transforming raw session logs into a living Obsidian
+knowledge graph — was inspired by [Andrej Karpathy](https://x.com/karpathy)'s
+"LLM Knowledge Bases" workflow (April 2026). Karpathy described a pattern of
+collecting raw data into a directory, having an LLM "compile" it into a `.md`
+wiki with backlinks and concept articles, and using Obsidian as the viewing
+frontend — with the LLM as the primary editor, not the human.
+
+We adopted this core insight — **raw data → LLM-compiled wiki → Obsidian** —
+and built Shenron's compiler on top of it. Where we diverge:
+
+| Karpathy's approach | Shenron's approach |
+|---------------------|-------------------|
+| Manual data ingest (web clipper, papers) | Automatic ingest from Claude Code JSONL sessions |
+| LLM-driven compilation (needs API calls) | Heuristic compiler — zero LLM, pure algorithm (entity extraction, weight classification, density filtering) |
+| Generic wiki structure | Three-layer output: session digests → concept nodes → idea seeds |
+| Single-user research wiki | Multi-instance support (Mac + VPS sessions compile into one wiki) |
+| No history protection | Archaeological recovery — restored sessions are never overwritten |
+| — | Concept evolution tracking across sessions over time |
+
+We built on the idea; the implementation is entirely our own.
+
 ## License
 
-MIT © 小code & Rob
+AGPL-3.0 © 小code & Rob
+
+Previous versions (up to the last MIT-licensed commit) remain available under
+MIT. From this commit forward, all new code is licensed under the
+[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html).
 
 ---
 
-*Summon the Dragon. Recall everything.*
+*Summon the Dragon. Recall everything. Compile knowledge.*

@@ -482,6 +482,98 @@ def digest(
 
 
 @app.command()
+def compile(
+    session_id: Annotated[str | None, typer.Argument(help="Session UUID or prefix (omit for --all)")] = None,
+    project: Annotated[str | None, typer.Option("--project", "-p", help="Filter by project name")] = None,
+    output: Annotated[str, typer.Option("--output", "-o", help="Wiki output directory")] = str(Path.home() / "Code-Rob-Wiki"),
+    all_sessions: Annotated[bool, typer.Option("--all", "-a", help="Compile all sessions")] = False,
+    after: Annotated[str | None, typer.Option("--after", help="Sessions after date (YYYY-MM-DD)")] = None,
+    before: Annotated[str | None, typer.Option("--before", help="Sessions before date (YYYY-MM-DD)")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be compiled without writing")] = False,
+) -> None:
+    """Compile sessions into an Obsidian wiki (Code & Rob Wiki)."""
+    from shenron.compiler import (
+        build_concept_index,
+        compile_session,
+        write_wiki,
+    )
+    from shenron.parser import parse_session
+
+    after_dt = _parse_date(after, "after")
+    before_dt = _parse_date(before, "before")
+
+    if all_sessions:
+        metas = list(_discover_sessions(
+            project_filter=project,
+            after=after_dt,
+            before=before_dt,
+        ))
+    elif session_id:
+        meta = _find_session(session_id)
+        if not meta:
+            console.print(f"\n  [red]Session not found:[/red] [bold]{session_id}[/bold]\n")
+            raise typer.Exit(1)
+        metas = [meta]
+    else:
+        console.print("\n  [yellow]Specify a session ID or use --all.[/yellow]\n")
+        raise typer.Exit(1)
+
+    if not metas:
+        console.print("\n  [yellow]No sessions found.[/yellow]\n")
+        return
+
+    # Sort by date
+    metas.sort(key=lambda m: m.modified_time)
+
+    console.print(f"\n  [bold]Compiling {len(metas)} session(s)...[/bold]\n")
+
+    compilations = []
+    for i, meta in enumerate(metas, 1):
+        session = parse_session(meta)
+        compiled = compile_session(session)
+        compilations.append(compiled)
+
+        topic_short = compiled.topic_sentence[:45] or "—"
+        wi = {"ops": "○", "dev": "●", "strategy": "★"}[compiled.weight]
+        console.print(
+            f"  [{i:3d}/{len(metas)}] {compiled.date} {wi} "
+            f"{compiled.user_message_count:2d} msgs · "
+            f"${compiled.cost_usd:7.2f} · "
+            f"{topic_short}"
+        )
+
+    # Build concept index
+    concepts = build_concept_index(compilations)
+
+    # Merge into daily digests for reporting
+    from shenron.compiler import merge_by_day
+    digests = merge_by_day(compilations)
+
+    console.print(f"\n  [bold green]Compilation complete:[/bold green]")
+    console.print(f"    Sessions: {len(compilations)} → {len(digests)} daily digests")
+    console.print(f"    Concepts: {len(concepts)}")
+
+    mature = sum(1 for n in concepts.values() if n.status == "mature")
+    growing = sum(1 for n in concepts.values() if n.status == "growing")
+    stub = sum(1 for n in concepts.values() if n.status == "stub")
+    console.print(f"    Status:   ● mature={mature}  ◐ growing={growing}  ○ stub={stub}")
+
+    if dry_run:
+        console.print(f"\n  [yellow]Dry run — no files written.[/yellow]\n")
+        console.print(f"  [dim]Top concepts:[/dim]")
+        for node in sorted(concepts.values(), key=lambda n: n.mention_count, reverse=True)[:15]:
+            console.print(f"    {node.mention_count:3d}× {node.name} ({node.status})")
+        console.print()
+        return
+
+    # Write to wiki
+    output_path = Path(output)
+    s, c, idx = write_wiki(compilations, concepts, output_path)
+    console.print(f"\n  [bold green]✓ Wiki written to:[/bold green] {output_path}")
+    console.print(f"    {s} session files + {c} concept files + INDEX.md\n")
+
+
+@app.command()
 def export(
     session_id: Annotated[str, typer.Argument(help="Session UUID or prefix")],
     fmt: Annotated[str, typer.Option("--format", "-f", help="Output format: markdown|json|html")] = "markdown",
