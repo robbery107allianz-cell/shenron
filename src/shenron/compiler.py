@@ -43,6 +43,8 @@ SEED_ENTITIES: dict[str, list[str]] = {
     "K12教育": ["K12", "Aaron", "Justin", "K12-Math", "K12-Logic"],
     "Dragon Radar": ["Dragon Radar", "龙珠雷达", "认知图谱"],
     "art-gallery": ["art-gallery", "艺术视频", "光的奏鸣", "油画"],
+    "智慧物流与供应链": ["供应链", "物流", "仓储", "智慧物流", "smart-logistics"],
+    "网店运营教材": ["网店运营", "网店推广", "电商教材", "淘宝运营"],
 
     # Tools
     "Shenron": ["Shenron", "shenron", "神龙", "神龍"],
