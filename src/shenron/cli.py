@@ -492,6 +492,7 @@ def compile(
     after: Annotated[str | None, typer.Option("--after", help="Sessions after date (YYYY-MM-DD)")] = None,
     before: Annotated[str | None, typer.Option("--before", help="Sessions before date (YYYY-MM-DD)")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be compiled without writing")] = False,
+    quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress per-session progress lines, show summary only")] = False,
 ) -> None:
     """Compile sessions into an Obsidian wiki (Code & Rob Wiki)."""
     from shenron.compiler import (
@@ -527,7 +528,8 @@ def compile(
     # Sort by date
     metas.sort(key=lambda m: m.modified_time)
 
-    console.print(f"\n  [bold]Compiling {len(metas)} session(s)...[/bold]\n")
+    if not quiet:
+        console.print(f"\n  [bold]Compiling {len(metas)} session(s)...[/bold]\n")
 
     compilations = []
     for i, meta in enumerate(metas, 1):
@@ -535,14 +537,15 @@ def compile(
         compiled = compile_session(session)
         compilations.append(compiled)
 
-        topic_short = compiled.topic_sentence[:45] or "—"
-        wi = {"ops": "○", "dev": "●", "strategy": "★"}[compiled.weight]
-        console.print(
-            f"  [{i:3d}/{len(metas)}] {compiled.date} {wi} "
-            f"{compiled.user_message_count:2d} msgs · "
-            f"${compiled.cost_usd:7.2f} · "
-            f"{topic_short}"
-        )
+        if not quiet:
+            topic_short = compiled.topic_sentence[:45] or "—"
+            wi = {"ops": "○", "dev": "●", "strategy": "★"}[compiled.weight]
+            console.print(
+                f"  [{i:3d}/{len(metas)}] {compiled.date} {wi} "
+                f"{compiled.user_message_count:2d} msgs · "
+                f"${compiled.cost_usd:7.2f} · "
+                f"{topic_short}"
+            )
 
     # Build concept index
     concepts = build_concept_index(compilations)

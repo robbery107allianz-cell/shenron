@@ -45,6 +45,9 @@ SEED_ENTITIES: dict[str, list[str]] = {
     "art-gallery": ["art-gallery", "艺术视频", "光的奏鸣", "油画"],
     "智慧物流与供应链": ["供应链", "物流", "仓储", "智慧物流", "smart-logistics"],
     "网店运营教材": ["网店运营", "网店推广", "电商教材", "淘宝运营"],
+    "TryWay": ["TryWay", "tryway", "TryWay Labs", "tryway.cc"],
+    "MingHarmony": ["mingharmony", "MingHarmony", "Ming Harmony", "mingharmony.com"],
+    "Namek": ["Namek", "namek", "Polymarket", "polymarket", "Kalshi", "预测市场"],
 
     # Tools
     "Shenron": ["Shenron", "shenron", "神龙", "神龍"],
