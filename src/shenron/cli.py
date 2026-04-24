@@ -493,6 +493,14 @@ def compile(
     before: Annotated[str | None, typer.Option("--before", help="Sessions before date (YYYY-MM-DD)")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be compiled without writing")] = False,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress per-session progress lines, show summary only")] = False,
+    with_observations: Annotated[
+        bool,
+        typer.Option("--with-observations", help="Enrich sessions with PostToolUse tool-use observations"),
+    ] = False,
+    observations_dir: Annotated[
+        str | None,
+        typer.Option("--observations-dir", help="Path to observations directory (default: ~/Code-Rob-Wiki/.observations)"),
+    ] = None,
 ) -> None:
     """Compile sessions into an Obsidian wiki (Code & Rob Wiki)."""
     from shenron.compiler import (
@@ -500,6 +508,7 @@ def compile(
         compile_session,
         write_wiki,
     )
+    from shenron.discovery import discover_observations
     from shenron.parser import parse_session
 
     after_dt = _parse_date(after, "after")
@@ -531,10 +540,25 @@ def compile(
     if not quiet:
         console.print(f"\n  [bold]Compiling {len(metas)} session(s)...[/bold]\n")
 
+    obs_path: Path | None = None
+    if with_observations:
+        obs_path = (
+            Path(observations_dir)
+            if observations_dir
+            else Path.home() / "Code-Rob-Wiki" / ".observations"
+        )
+        if not quiet:
+            console.print(f"  [dim]Observations dir:[/dim] {obs_path}\n")
+
     compilations = []
     for i, meta in enumerate(metas, 1):
         session = parse_session(meta)
-        compiled = compile_session(session)
+        observation = (
+            discover_observations(meta.session_id, obs_path)
+            if obs_path is not None
+            else None
+        )
+        compiled = compile_session(session, observation=observation)
         compilations.append(compiled)
 
         if not quiet:

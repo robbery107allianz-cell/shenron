@@ -46,6 +46,16 @@ class Message:
 
 
 @dataclass(frozen=True)
+class ObservationSummary:
+    """Aggregated PostToolUse observations for a session."""
+
+    tools_used: tuple[tuple[str, int], ...]  # (tool_name, count) sorted desc by count
+    files_touched: tuple[str, ...]           # unique file paths (Edit/Write/Read)
+    commands_run: tuple[str, ...]            # unique sanitized Bash commands
+    web_fetched: tuple[str, ...]             # WebSearch queries + WebFetch URLs
+
+
+@dataclass(frozen=True)
 class SessionMeta:
     """Lightweight session metadata — no full parse needed."""
 

@@ -1,12 +1,22 @@
 """Session file discovery — find and enumerate Claude Code sessions."""
 
+import json
 import re
+from collections import Counter
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
 from shenron.config import AGENT_PREFIX, PROJECTS_DIR, SESSION_GLOB
-from shenron.models import SessionMeta
+from shenron.models import ObservationSummary, SessionMeta
+
+# Regex: 20+ consecutive alphanumeric chars (likely a secret/token)
+_SECRET_RE = re.compile(r"[A-Za-z0-9_\-]{20,}")
+# Redact flag values that look like secrets (--flag SECRET_VALUE patterns)
+_FLAG_SECRET_RE = re.compile(
+    r"((?:--?(?:token|key|secret|password|auth|bearer|api[_-]?key)\s+))[^\s]+",
+    re.IGNORECASE,
+)
 
 # UUID pattern: 8-4-4-4-12 hex chars
 _UUID_RE = re.compile(
@@ -144,3 +154,130 @@ def discover_sessions(
                         file_size=stat.st_size,
                         modified_time=mtime,
                     )
+
+
+# ─── Observation discovery ────────────────────────────────────────────────────
+
+#: Tools whose tool_input carries a file_path field.
+_FILE_TOOLS = frozenset({"Read", "Edit", "Write", "NotebookEdit"})
+
+#: Max length for a rendered command string (chars).
+_CMD_MAX_LEN = 120
+
+
+def _sanitize_command(cmd: str) -> str:
+    """Return a sanitized version of a Bash command for safe wiki storage.
+
+    - Redacts flag values that look like secrets (--token, --key, etc.)
+    - Redacts standalone tokens: ≥ 20 consecutive alphanum chars that are
+      NOT a plain filesystem path segment (e.g. ghp_xxx, sk-ant-xxx)
+    - Truncates the result to _CMD_MAX_LEN chars
+    """
+    if not cmd:
+        return cmd
+
+    # Step 1: redact --flag SECRET patterns
+    sanitized = _FLAG_SECRET_RE.sub(lambda m: m.group(1) + "***", cmd)
+
+    # Step 2: redact bare long tokens that are not filesystem paths
+    def _maybe_redact(match: re.Match[str]) -> str:
+        token = match.group(0)
+        # Allow: path-like tokens (contain / or .) — these are file paths or URLs
+        if "/" in token or "." in token:
+            return token
+        # Allow: git SHAs are exactly 40 hex chars — short enough and expected
+        if len(token) == 40 and all(c in "0123456789abcdefABCDEF" for c in token):
+            return token
+        # Redact if > 20 chars (likely API key / PAT / bearer token)
+        return "***" if len(token) > 20 else token
+
+    sanitized = _SECRET_RE.sub(_maybe_redact, sanitized)
+
+    # Step 3: truncate
+    if len(sanitized) > _CMD_MAX_LEN:
+        sanitized = sanitized[:_CMD_MAX_LEN - 3] + "..."
+
+    return sanitized
+
+
+def discover_observations(
+    session_id: str,
+    obs_dir: Path,
+) -> ObservationSummary | None:
+    """Scan obs_dir for PostToolUse events belonging to session_id.
+
+    obs_dir layout: obs_dir/YYYY-MM-DD/<session_id>.jsonl
+
+    Returns an ObservationSummary if any events are found, else None.
+    Malformed JSON lines are silently skipped.
+    """
+    if not obs_dir.exists():
+        return None
+
+    tool_counter: Counter[str] = Counter()
+    seen_files: dict[str, None] = {}   # ordered set
+    seen_cmds: dict[str, None] = {}    # ordered set
+    seen_web: dict[str, None] = {}     # ordered set
+
+    # Scan all date subdirectories (YYYY-MM-DD)
+    for date_dir in sorted(obs_dir.iterdir()):
+        if not date_dir.is_dir():
+            continue
+        obs_file = date_dir / f"{session_id}.jsonl"
+        if not obs_file.is_file():
+            continue
+
+        with obs_file.open(encoding="utf-8") as f:
+            for raw_line in f:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    event = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+
+                tool_name: str = event.get("tool_name", "")
+                if not tool_name:
+                    continue
+
+                tool_counter[tool_name] += 1
+                tool_input: dict = event.get("tool_input") or {}
+
+                # Files touched (Edit / Write / Read / NotebookEdit)
+                if tool_name in _FILE_TOOLS:
+                    path = tool_input.get("file_path", "")
+                    if path:
+                        seen_files[path] = None
+
+                # Commands run (Bash)
+                if tool_name == "Bash":
+                    raw_cmd = tool_input.get("command", "").strip()
+                    if raw_cmd:
+                        clean = _sanitize_command(raw_cmd)
+                        seen_cmds[clean] = None
+
+                # Web activity (WebFetch / WebSearch)
+                if tool_name == "WebFetch":
+                    url = tool_input.get("url", "").strip()
+                    if url:
+                        seen_web[url] = None
+                if tool_name == "WebSearch":
+                    query = tool_input.get("query", "").strip()
+                    if query:
+                        seen_web[query] = None
+
+    if not tool_counter:
+        return None
+
+    tools_sorted = tuple(
+        (name, count)
+        for name, count in tool_counter.most_common()
+    )
+
+    return ObservationSummary(
+        tools_used=tools_sorted,
+        files_touched=tuple(seen_files.keys()),
+        commands_run=tuple(seen_cmds.keys()),
+        web_fetched=tuple(seen_web.keys()),
+    )

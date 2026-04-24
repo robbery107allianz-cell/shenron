@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from shenron.digester import _has_signal, _truncate
-from shenron.models import Message, Session
+from shenron.models import Message, ObservationSummary, Session
 from shenron.pricing import compute_cost
 
 # ─── Entity dictionary ───────────────────────────────────────────────────────
@@ -183,6 +183,7 @@ class CompiledSession:
     tags: tuple[str, ...]
     weight: str = "ops"                  # ops | issue | dev | strategy
     weight_value: int = 1                # 1-4 numeric weight
+    observation: ObservationSummary | None = None  # tool-use observations
 
 
 @dataclass
@@ -255,7 +256,10 @@ def _generate_tag(entity: str) -> str:
     return tag
 
 
-def compile_session(session: Session) -> CompiledSession:
+def compile_session(
+    session: Session,
+    observation: ObservationSummary | None = None,
+) -> CompiledSession:
     """Compile a parsed Session into a CompiledSession summary (Layer 1)."""
     # Entity extraction: USER messages only.
     # System messages and assistant boilerplate contain MEMORY.md / CLAUDE.md
@@ -374,6 +378,7 @@ def compile_session(session: Session) -> CompiledSession:
         tags=tags,
         weight=weight,
         weight_value=weight_val,
+        observation=observation,
     )
 
 
@@ -395,6 +400,40 @@ class DailyDigest:
     file_changes: tuple[FileChange, ...]
     tags: tuple[str, ...]
     models: tuple[str, ...]
+    tool_summary: ObservationSummary | None = None  # merged tool-use observations
+
+
+def _merge_observations(
+    observations: list[ObservationSummary | None],
+) -> ObservationSummary | None:
+    """Merge multiple ObservationSummary objects into one (for a daily digest)."""
+    from collections import Counter as _Counter
+
+    non_null = [o for o in observations if o is not None]
+    if not non_null:
+        return None
+
+    tool_counter: _Counter[str] = _Counter()
+    seen_files: dict[str, None] = {}
+    seen_cmds: dict[str, None] = {}
+    seen_web: dict[str, None] = {}
+
+    for obs in non_null:
+        for tool_name, count in obs.tools_used:
+            tool_counter[tool_name] += count
+        for f in obs.files_touched:
+            seen_files[f] = None
+        for c in obs.commands_run:
+            seen_cmds[c] = None
+        for w in obs.web_fetched:
+            seen_web[w] = None
+
+    return ObservationSummary(
+        tools_used=tuple(tool_counter.most_common()),
+        files_touched=tuple(seen_files.keys()),
+        commands_run=tuple(seen_cmds.keys()),
+        web_fetched=tuple(seen_web.keys()),
+    )
 
 
 def merge_by_day(compilations: list[CompiledSession]) -> list[DailyDigest]:
@@ -439,6 +478,9 @@ def merge_by_day(compilations: list[CompiledSession]) -> list[DailyDigest]:
         # Models
         all_models = tuple(sorted({m for s in sessions for m in s.models}))
 
+        # Merge observations across sessions in the day
+        tool_summary = _merge_observations([s.observation for s in sessions])
+
         digests.append(DailyDigest(
             date=date,
             session_count=len(sessions),
@@ -453,6 +495,7 @@ def merge_by_day(compilations: list[CompiledSession]) -> list[DailyDigest]:
             file_changes=all_file_changes,
             tags=all_tags,
             models=all_models,
+            tool_summary=tool_summary,
         ))
 
     return digests
@@ -508,6 +551,25 @@ def render_daily_md(dd: DailyDigest) -> str:
         for fc in dd.file_changes:
             short_path = fc.path.replace(home, "~")
             lines.append(f"- `{short_path}` — {fc.action}")
+        lines.append("")
+
+    # Tool activity (observations)
+    if dd.tool_summary is not None:
+        ts = dd.tool_summary
+        lines.append("## 工具履历（observations）")
+        if ts.tools_used:
+            tool_str = " · ".join(f"`{name}×{count}`" for name, count in ts.tools_used[:8])
+            lines.append(f"- 工具: {tool_str}")
+        if ts.files_touched:
+            for fp in ts.files_touched[:20]:
+                short = fp.replace(home, "~")
+                lines.append(f"- 改动: `{short}`")
+        if ts.commands_run:
+            for cmd in ts.commands_run[:10]:
+                lines.append(f"- 命令: `{cmd}`")
+        if ts.web_fetched:
+            for item in ts.web_fetched[:5]:
+                lines.append(f"- 查询: {item}")
         lines.append("")
 
     # Meta
