@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.1984.wiki.phase2</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/titans/.local/bin/wiki-phase2-daily.sh</string>
+    </array>
+
+    <!-- 每天 13:05 运行（夹在 Obsidian 备份 13:00 和 iCloud mirror 13:10 之间）-->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>13</integer>
+        <key>Minute</key>
+        <integer>5</integer>
+    </dict>
+
+    <!-- 如果错过时间（Mac 关机），开机后补跑一次 -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/wiki-phase2-daily.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/wiki-phase2-daily-error.log</string>
+</dict>
+</plist>
